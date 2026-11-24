@@ -1138,3 +1138,39 @@ if st.session_state.button_click:
     st.write(f"Clicked row {click['row']}, label: {click['label']}")
 
 st.write(st.session_state)
+
+st.header("Image column with link column:")
+
+
+def _square_svg(color: str) -> str:
+    return (
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' "
+        f"width='40' height='40'><rect width='40' height='40' fill='{color}'/></svg>"
+    )
+
+
+with st.container(key="image_link_column_df"):
+    st.dataframe(
+        pd.DataFrame(
+            {
+                "name": ["Item A", "Item B", "Item C"],
+                "logo": [
+                    _square_svg("red"),
+                    _square_svg("blue"),
+                    _square_svg("green"),
+                ],
+                "url": [
+                    "https://example.com/item-a",
+                    "https://example.com/item-b",
+                    None,
+                ],
+            }
+        ),
+        column_config={
+            "name": st.column_config.TextColumn(width="small"),
+            "logo": st.column_config.ImageColumn(width="small", link_column="url"),
+            "url": None,
+        },
+        hide_index=True,
+        width="content",
+    )

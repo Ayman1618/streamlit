@@ -17,6 +17,7 @@
 import ButtonColumn from "./ButtonColumn"
 import ButtonCellRenderer from "./cells/ButtonCell"
 import JsonCellRenderer from "./cells/JsonCell"
+import LinkedImageCellRenderer from "./cells/LinkedImageCell"
 import MarkdownCellRenderer from "./cells/MarkdownCell"
 import MediaCellRenderer from "./cells/MediaCell"
 import MultiSelectCellRenderer from "./cells/MultiSelectCell"
@@ -86,6 +87,7 @@ export const CustomCells = [
   MediaCellRenderer,
   MultiSelectCellRenderer,
   ButtonCellRenderer,
+  LinkedImageCellRenderer,
 ]
 
 export {

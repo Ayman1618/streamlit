@@ -260,6 +260,29 @@ describe("fillDataFramePrintSlot", () => {
     expect(cell?.textContent).toBe("")
   })
 
+  it("prints a linked image cell as an image instead of its URLs", () => {
+    const url = "data:image/png;base64,iVBORw0KGgo="
+    fillDataFramePrintSlot(
+      slot,
+      [column("Picture", { kind: "image" })],
+      () => ({
+        kind: GridCellKind.Custom,
+        data: {
+          kind: "linked-image-cell",
+          imageUrl: url,
+          href: "https://example.com/details",
+        },
+        copyData: url,
+        allowOverlay: true,
+      }),
+      { startRow: 0, rowCount: 1 }
+    )
+
+    const cell = slot.querySelector("td")
+    expect(cell?.querySelector("img")).toHaveAttribute("src", url)
+    expect(cell?.textContent).toBe("")
+  })
+
   it("prints option labels for selectbox and multiselect cells", () => {
     fillDataFramePrintSlot(
       slot,

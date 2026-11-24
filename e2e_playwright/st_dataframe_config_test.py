@@ -20,6 +20,7 @@ from e2e_playwright.shared.app_utils import (
     check_top_level_class,
     click_button,
     expect_font,
+    get_element_by_key,
     reset_hovering,
 )
 from e2e_playwright.shared.dataframe_utils import (
@@ -30,7 +31,7 @@ from e2e_playwright.shared.dataframe_utils import (
     open_column_menu,
 )
 
-NUM_DATAFRAME_ELEMENTS = 38
+NUM_DATAFRAME_ELEMENTS = 39
 
 
 def test_dataframe_supports_various_configurations(
@@ -442,3 +443,54 @@ def test_button_column_multi_action_menu(
 
     # Menu should be closed after selection
     expect(menu).not_to_be_visible()
+
+
+def test_image_column_link_column(app: Page):
+    """Test that linked images open their row's URL in a new tab.
+
+    Also checks keyboard access to the linked overlay, and that images without
+    a URL keep the existing select-and-preview behavior.
+    """
+    # Serve the destinations locally so the test does not depend on the network:
+    app.context.route(
+        "https://example.com/**",
+        lambda route: route.fulfill(body="destination", content_type="text/plain"),
+    )
+    dataframe_element = get_element_by_key(app, "image_link_column_df").get_by_test_id(
+        "stDataFrame"
+    )
+    dataframe_element.scroll_into_view_if_needed()
+    expect_canvas_to_be_visible(dataframe_element)
+
+    # Clicking a linked image opens the URL of the same row in a new tab.
+    # Rows start at 1 because row 0 is the header; column 1 is the image.
+    for row_pos, expected_url in [
+        (1, "https://example.com/item-a"),
+        (2, "https://example.com/item-b"),
+    ]:
+        with app.context.expect_page() as new_page_info:
+            click_on_cell(dataframe_element, row_pos, 1)
+        new_page = new_page_info.value
+        expect(new_page).to_have_url(expected_url)
+        new_page.close()
+
+    # Keyboard: select the name cell, move to the image and press Enter to open
+    # the overlay, which links the enlarged image to the destination.
+    click_on_cell(dataframe_element, 1, 0)
+    app.keyboard.press("ArrowRight")
+    app.keyboard.press("Enter")
+    cell_overlay = get_open_cell_overlay(app)
+    expect(cell_overlay.get_by_role("link")).to_have_attribute(
+        "href", "https://example.com/item-a"
+    )
+    app.keyboard.press("Escape")
+    expect(cell_overlay).not_to_be_attached()
+
+    # An image without a URL is selected on click and opens the regular preview
+    # on a second click, without opening a new tab.
+    click_on_cell(dataframe_element, 3, 1)
+    click_on_cell(dataframe_element, 3, 1)
+    cell_overlay = get_open_cell_overlay(app)
+    expect(cell_overlay.locator("img")).to_be_visible()
+    expect(cell_overlay.get_by_role("link")).not_to_be_attached()
+    assert len(app.context.pages) == 1

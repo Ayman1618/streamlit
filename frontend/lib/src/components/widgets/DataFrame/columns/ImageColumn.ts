@@ -22,11 +22,85 @@ import {
 
 import { notNullOrUndefined } from "~lib/util/utils"
 
+import {
+  createLinkedImageCell,
+  getSafeImageLinkHref,
+  isLinkedImageCell,
+  type LinkedImageCell,
+} from "./cells/LinkedImageCell"
 import { type BaseColumn, type BaseColumnProps, toSafeString } from "./utils"
+
+interface ImageColumnParams {
+  /**
+   * The name of the column that contains the URL to open when an image in
+   * this column is clicked.
+   */
+  readonly link_column?: string
+}
+
+/**
+ * Maps the index number of each image column configured with `link_column`
+ * to the column that contains its URLs.
+ *
+ * Link columns are looked up by name in `allColumns`, which includes hidden
+ * columns and columns left out of `column_order`. If several columns share the
+ * name, the first one is used. Image columns whose link column does not exist
+ * are left out, so their cells render as plain images.
+ */
+export function getImageLinkColumns(
+  columns: BaseColumn[],
+  allColumns: BaseColumn[]
+): Map<number, BaseColumn> {
+  const imageLinkColumns = new Map<number, BaseColumn>()
+
+  columns.forEach(column => {
+    if (column.kind !== "image") {
+      return
+    }
+
+    const linkColumnName = (
+      column.columnTypeOptions as ImageColumnParams | undefined
+    )?.link_column
+    if (typeof linkColumnName !== "string" || linkColumnName === "") {
+      return
+    }
+
+    const linkColumn = allColumns.find(
+      candidate => candidate.name === linkColumnName
+    )
+    if (linkColumn !== undefined) {
+      imageLinkColumns.set(column.indexNumber, linkColumn)
+    }
+  })
+
+  return imageLinkColumns
+}
+
+/**
+ * Turns an image cell into a linked image cell if the link value is a usable
+ * URL. Cells without an image, with an unusable link value, or of another
+ * kind (e.g. error cells) are returned unchanged.
+ */
+export function withImageLink(cell: GridCell, linkValue: unknown): GridCell {
+  if (cell.kind !== GridCellKind.Image || cell.data.length === 0) {
+    return cell
+  }
+
+  const imageUrl = cell.data[0]
+  const href = getSafeImageLinkHref(linkValue)
+  if (imageUrl === "" || href === undefined) {
+    return cell
+  }
+
+  return createLinkedImageCell(cell, href)
+}
 
 /**
  * A column type that renders an image as a cell value. On cell selection, open
  * the cell overlay with a full version of the image.
+ *
+ * If the column is configured with `link_column`, the data loaders turn cells
+ * with a usable URL into linked image cells (see `withImageLink`).
  *
  * This column type is currently read-only.
  */
@@ -61,7 +135,11 @@ function ImageColumn(props: BaseColumnProps): BaseColumn {
         displayData: imageUrls,
       } as ImageCell
     },
-    getCellValue(cell: ImageCell): string | null {
+    getCellValue(cell: ImageCell | LinkedImageCell): string | null {
+      if (isLinkedImageCell(cell)) {
+        return cell.data.imageUrl
+      }
+
       if (cell.data.length === 0) {
         return null
       }

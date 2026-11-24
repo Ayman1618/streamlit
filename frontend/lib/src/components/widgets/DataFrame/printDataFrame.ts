@@ -30,6 +30,7 @@ import {
   SELF_DRAWN_MISSING_KINDS,
   toSafeString,
 } from "~lib/components/widgets/DataFrame/columns"
+import { isLinkedImageCell } from "~lib/components/widgets/DataFrame/columns/cells/LinkedImageCell"
 import { genericFonts } from "~lib/theme/primitives/typography"
 import { isNullOrUndefined } from "~lib/util/utils"
 
@@ -206,6 +207,10 @@ function printCellContent(
 
   if (cell.kind === GridCellKind.Image) {
     return { imageUrls: cell.data }
+  }
+
+  if (isLinkedImageCell(cell)) {
+    return { imageUrls: [cell.data.imageUrl] }
   }
 
   // LinkColumn icon cells store a Material ligature or codepoint in

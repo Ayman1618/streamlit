@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useCallback } from "react"
+import { useCallback, useMemo } from "react"
 
 import type { DataEditorProps, GridCell } from "@glideapps/glide-data-grid"
 
@@ -23,6 +23,10 @@ import {
   type BaseColumn,
   getErrorCell,
 } from "~lib/components/widgets/DataFrame/columns"
+import {
+  getImageLinkColumns,
+  withImageLink,
+} from "~lib/components/widgets/DataFrame/columns/ImageColumn"
 import { getStyledCell } from "~lib/dataframes/pandasStylerUtils"
 import type { Quiver } from "~lib/dataframes/Quiver"
 import { notNullOrUndefined } from "~lib/util/utils"
@@ -38,6 +42,8 @@ type DataLoaderReturn = Pick<DataEditorProps, "getCellContent">
  * @param data - The Arrow data extracted from the proto message
  * @param numRows - The number of rows of the current state (includes row additions/deletions)
  * @param editingState - The editing state of the data editor
+ * @param allColumns - All columns, including hidden ones. Used to resolve the
+ *   `link_column` of image columns. Defaults to `columns`.
  *
  * @returns the columns and the cell content getter compatible with glide-data-grid.
  */
@@ -45,8 +51,14 @@ function useDataLoader(
   data: Quiver,
   columns: BaseColumn[],
   numRows: number,
-  editingState: React.MutableRefObject<EditingState>
+  editingState: React.MutableRefObject<EditingState>,
+  allColumns: BaseColumn[] = columns
 ): DataLoaderReturn {
+  const imageLinkColumns = useMemo(
+    () => getImageLinkColumns(columns, allColumns),
+    [columns, allColumns]
+  )
+
   const getCellContent = useCallback(
     ([col, row]: readonly [number, number]): GridCell => {
       if (col > columns.length - 1) {
@@ -105,12 +117,28 @@ function useDataLoader(
         const arrowCell = data.getCell(originalRow, originalCol)
         const styledCell = getStyledCell(data, originalRow, originalCol)
 
-        return getCellFromArrow(
+        const cell = getCellFromArrow(
           column,
           arrowCell,
           styledCell,
           data.styler?.cssStyles
         )
+
+        const linkColumn = imageLinkColumns.get(originalCol)
+        if (linkColumn === undefined) {
+          return cell
+        }
+
+        // Read the link from the same original row as the image, preferring
+        // an edited value of the link column over the Arrow value:
+        const editedLinkCell = editingState.current.getCell(
+          linkColumn.indexNumber,
+          originalRow
+        )
+        const linkValue = notNullOrUndefined(editedLinkCell)
+          ? linkColumn.getCellValue(editedLinkCell)
+          : data.getCell(originalRow, linkColumn.indexNumber).content
+        return withImageLink(cell, linkValue)
       } catch (error) {
         return getErrorCell(
           "Error during cell creation",
@@ -119,7 +147,7 @@ function useDataLoader(
         )
       }
     },
-    [columns, numRows, data, editingState]
+    [columns, numRows, data, editingState, imageLinkColumns]
   )
 
   return {

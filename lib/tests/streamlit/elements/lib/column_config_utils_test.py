@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -46,7 +47,7 @@ from streamlit.elements.lib.column_config_utils import (
     register_button_column_widgets,
     update_column_config,
 )
-from streamlit.elements.lib.column_types import ButtonColumn
+from streamlit.elements.lib.column_types import ButtonColumn, ImageColumn
 from streamlit.errors import StreamlitAPIException
 from streamlit.proto.Dataframe_pb2 import Dataframe as DataframeProto
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
@@ -582,6 +583,29 @@ class ColumnConfigUtilsTest(unittest.TestCase):
             )
         else:
             assert INDEX_IDENTIFIER not in columns_config
+
+    def test_image_link_column_is_serialized_to_json(self) -> None:
+        """Test that the image link column reaches the frontend JSON config."""
+        serialized = _convert_column_config_to_json(
+            {
+                "logo": ImageColumn("Logo", link_column="url"),
+                "url": {"hidden": True},
+            }
+        )
+
+        assert json.loads(serialized) == {
+            "logo": {
+                "label": "Logo",
+                "type_config": {"type": "image", "link_column": "url"},
+            },
+            "url": {"hidden": True},
+        }
+
+    def test_image_column_without_link_column_omits_key_in_json(self) -> None:
+        """Test that an unlinked image column keeps its existing JSON config."""
+        serialized = _convert_column_config_to_json({"logo": ImageColumn()})
+
+        assert json.loads(serialized) == {"logo": {"type_config": {"type": "image"}}}
 
     def test_nan_as_value_raises_exception(self):
         """Test that the usage of `nan` as value in column config raises an exception."""

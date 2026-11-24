@@ -16,8 +16,8 @@
 
 import { useRef } from "react"
 
-import { GridCellKind } from "@glideapps/glide-data-grid"
-import { renderHook } from "@testing-library/react"
+import { type GridCell, GridCellKind } from "@glideapps/glide-data-grid"
+import { act, renderHook } from "@testing-library/react"
 import { Field, Utf8 } from "apache-arrow"
 
 import type { ArrowData } from "@streamlit/protobuf"
@@ -27,12 +27,15 @@ import {
   isErrorCell,
   TextColumn,
 } from "~lib/components/widgets/DataFrame/columns"
+import { isLinkedImageCell } from "~lib/components/widgets/DataFrame/columns/cells/LinkedImageCell"
+import ImageColumn from "~lib/components/widgets/DataFrame/columns/ImageColumn"
 import { DataFrameCellType } from "~lib/dataframes/arrowTypeUtils"
 import { Quiver } from "~lib/dataframes/Quiver"
 import { MULTI } from "~lib/mocks/arrow/multi"
 import { UNICODE } from "~lib/mocks/arrow/types/unicode"
 
 import EditingState from "./EditingState"
+import useColumnSort from "./useColumnSort"
 import useDataLoader from "./useDataLoader"
 
 // These columns are based on the UNICODE mock arrow table:
@@ -244,5 +247,165 @@ describe("useDataLoader hook", () => {
 
     // We should get an error cell since an error is thrown in the try/catch block
     expect(isErrorCell(result.current.getCellContent([1, 0]))).toBe(true)
+  })
+})
+
+describe("useDataLoader with image link columns", () => {
+  // Image column on "c1" (values "foo", "bar") that links to "c2" ("1", "2").
+  const LINKED_IMAGE_COLUMN = ImageColumn({
+    ...MOCK_COLUMNS[1],
+    columnTypeOptions: { type: "image", link_column: "c2" },
+  })
+  const URL_COLUMN = MOCK_COLUMNS[2]
+  // The URL column is hidden: it is only part of `allColumns`.
+  const VISIBLE_COLUMNS = [MOCK_COLUMNS[0], LINKED_IMAGE_COLUMN]
+  const ALL_COLUMNS = [MOCK_COLUMNS[0], LINKED_IMAGE_COLUMN, URL_COLUMN]
+
+  function renderLinkedLoader(
+    setupEditingState?: (editingState: EditingState) => void,
+    columns: BaseColumn[] = VISIBLE_COLUMNS,
+    allColumns: BaseColumn[] | undefined = ALL_COLUMNS
+  ): { getCellContent: (item: readonly [number, number]) => GridCell } {
+    const data = new Quiver({ data: UNICODE })
+    const numRows = data.dimensions.numDataRows
+
+    const { result } = renderHook(() => {
+      const editingStateRef = useRef<EditingState>(new EditingState(numRows))
+      setupEditingState?.(editingStateRef.current)
+      return useDataLoader(data, columns, numRows, editingStateRef, allColumns)
+    })
+    return result.current
+  }
+
+  function getLink(cell: GridCell): { imageUrl: string; href: string } {
+    if (!isLinkedImageCell(cell)) {
+      throw new Error(`Expected a linked image cell, got ${cell.kind}`)
+    }
+    return { imageUrl: cell.data.imageUrl, href: cell.data.href }
+  }
+
+  it("links each image to the URL of the same row from a hidden column", () => {
+    const { getCellContent } = renderLinkedLoader()
+
+    expect(getLink(getCellContent([1, 0]))).toEqual({
+      imageUrl: "foo",
+      href: "1",
+    })
+    expect(getLink(getCellContent([1, 1]))).toEqual({
+      imageUrl: "bar",
+      href: "2",
+    })
+    // Other columns are not affected:
+    expect(getCellContent([0, 0]).kind).toBe(GridCellKind.Text)
+  })
+
+  it("renders plain images if the link column does not exist", () => {
+    const imageColumn = ImageColumn({
+      ...MOCK_COLUMNS[1],
+      columnTypeOptions: { type: "image", link_column: "missing" },
+    })
+    const { getCellContent } = renderLinkedLoader(
+      undefined,
+      [MOCK_COLUMNS[0], imageColumn],
+      [MOCK_COLUMNS[0], imageColumn, URL_COLUMN]
+    )
+
+    const cell = getCellContent([1, 0])
+    expect(cell.kind).toBe(GridCellKind.Image)
+    expect(isLinkedImageCell(cell)).toBe(false)
+  })
+
+  it("renders plain images for an image column without link_column", () => {
+    const imageColumn = ImageColumn(MOCK_COLUMNS[1])
+    const { getCellContent } = renderLinkedLoader(
+      undefined,
+      [MOCK_COLUMNS[0], imageColumn],
+      [MOCK_COLUMNS[0], imageColumn, URL_COLUMN]
+    )
+
+    expect(getCellContent([1, 0])).toMatchObject({
+      kind: GridCellKind.Image,
+      data: ["foo"],
+    })
+  })
+
+  it("uses an edited link value of the same row", () => {
+    const { getCellContent } = renderLinkedLoader(editingState => {
+      editingState.setCell(
+        URL_COLUMN.indexNumber,
+        1,
+        URL_COLUMN.getCell("https://example.com/edited")
+      )
+    })
+
+    expect(getLink(getCellContent([1, 0])).href).toBe("1")
+    expect(getLink(getCellContent([1, 1])).href).toBe(
+      "https://example.com/edited"
+    )
+  })
+
+  it.each([
+    ["an empty", ""],
+    ["a null", null],
+    ["a dangerous", "javascript:alert(1)"],
+  ])("does not link an image to %s URL", (_description, linkValue) => {
+    const { getCellContent } = renderLinkedLoader(editingState => {
+      editingState.setCell(
+        URL_COLUMN.indexNumber,
+        0,
+        URL_COLUMN.getCell(linkValue)
+      )
+    })
+
+    const cell = getCellContent([1, 0])
+    expect(cell).toMatchObject({ kind: GridCellKind.Image, data: ["foo"] })
+    // The other row keeps its link:
+    expect(getLink(getCellContent([1, 1])).href).toBe("2")
+  })
+
+  it("keeps image and link of the same row after a row deletion", () => {
+    const { getCellContent } = renderLinkedLoader(editingState => {
+      editingState.deleteRow(0)
+    })
+
+    expect(getLink(getCellContent([1, 0]))).toEqual({
+      imageUrl: "bar",
+      href: "2",
+    })
+  })
+
+  it("keeps image and link of the same row after sorting", () => {
+    const data = new Quiver({ data: UNICODE })
+    const numRows = data.dimensions.numDataRows
+
+    const { result } = renderHook(() => {
+      const editingStateRef = useRef<EditingState>(new EditingState(numRows))
+      const { getCellContent } = useDataLoader(
+        data,
+        VISIBLE_COLUMNS,
+        numRows,
+        editingStateRef,
+        ALL_COLUMNS
+      )
+      return useColumnSort({
+        mode: "client",
+        numRows,
+        columns: VISIBLE_COLUMNS,
+        getCellContent,
+      })
+    })
+
+    // Sorting the image column ascending puts "bar" before "foo":
+    act(() => result.current.sortColumn(1, "asc"))
+
+    expect(getLink(result.current.getCellContent([1, 0]))).toEqual({
+      imageUrl: "bar",
+      href: "2",
+    })
+    expect(getLink(result.current.getCellContent([1, 1]))).toEqual({
+      imageUrl: "foo",
+      href: "1",
+    })
+    expect(result.current.getOriginalIndex(0)).toBe(1)
   })
 })

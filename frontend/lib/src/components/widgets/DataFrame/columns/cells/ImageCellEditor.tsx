@@ -17,7 +17,7 @@
 import styled from "@emotion/styled"
 import type { ImageEditorType } from "@glideapps/glide-data-grid"
 
-const StyledImage = styled.img({
+export const StyledImage = styled.img({
   maxWidth: "100%",
   maxHeight: "37.5rem",
   objectFit: "scale-down",

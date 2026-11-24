@@ -475,6 +475,19 @@ class ColumnTypesTest(unittest.TestCase):
             "type_config": {"type": "image"},
         }, "Should have all the properties defined."
 
+    def test_image_column_link_column(self) -> None:
+        """Test ImageColumn with a link column."""
+
+        assert remove_none_values(ImageColumn("Preview", link_column="url")) == {
+            "label": "Preview",
+            "type_config": {"type": "image", "link_column": "url"},
+        }
+
+        # An explicit None leaves the config identical to the default:
+        assert remove_none_values(ImageColumn(link_column=None)) == remove_none_values(
+            ImageColumn()
+        )
+
     def test_audio_column(self):
         """Test AudioColumn creation."""
 

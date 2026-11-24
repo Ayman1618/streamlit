@@ -195,6 +195,7 @@ class AreaChartColumnConfig(TypedDict):
 
 class ImageColumnConfig(TypedDict):
     type: Literal["image"]
+    link_column: NotRequired[str | None]
 
 
 class AudioColumnConfig(TypedDict):
@@ -1678,6 +1679,7 @@ def ImageColumn(
     help: str | None = None,
     pinned: bool | None = None,
     alignment: ContentAlignment | None = None,
+    link_column: str | None = None,
 ) -> ColumnConfig:
     """Configure an image column in ``st.dataframe`` or ``st.data_editor``.
 
@@ -1737,8 +1739,25 @@ def ImageColumn(
         The horizontal alignment of cell content. If this is ``None``
         (default), images are center-aligned.
 
+    link_column : str or None
+        The name of another column that contains the URL to open when a user
+        clicks an image. If this is ``None`` (default), images aren't links.
+
+        When a user clicks an image that has a URL in the same row of the
+        link column, Streamlit opens the URL in a new tab. The URL can be
+        fully qualified, like ``"https://example.com"``, or relative to your
+        app's URL, like ``"/my_page"``. Cells without a URL show a plain image.
+        URLs using the ``javascript:`` or ``vbscript:`` scheme are ignored.
+
+        The link column can be hidden, for example with
+        ``column_config={"url": None}``. Clicking a linked image opens the
+        link instead of selecting the cell. To display the larger image, use
+        the arrow keys to select the cell and press ``Enter``.
+
     Examples
     --------
+    **Example 1: Display images**
+
     .. code-block:: python
         :filename: streamlit_app.py
 
@@ -1769,6 +1788,39 @@ def ImageColumn(
     .. output::
         https://doc-image-column.streamlit.app/
         height: 300px
+
+    **Example 2: Open a link when an image is clicked**
+
+    Use ``link_column`` to open each row's URL from another column. In this
+    example, the URL column is hidden.
+
+    .. code-block:: python
+        :filename: streamlit_app.py
+
+        import pandas as pd
+        import streamlit as st
+
+        data_df = pd.DataFrame(
+            {
+                "logo": [
+                    "https://streamlit.io/images/brand/streamlit-mark-color.png",
+                    "https://www.python.org/static/img/python-logo.png",
+                ],
+                "url": [
+                    "https://streamlit.io",
+                    "https://www.python.org",
+                ],
+            }
+        )
+
+        st.dataframe(
+            data_df,
+            column_config={
+                "logo": st.column_config.ImageColumn("Logo", link_column="url"),
+                "url": None,
+            },
+            hide_index=True,
+        )
     """
     return ColumnConfig(
         label=label,
@@ -1776,7 +1828,7 @@ def ImageColumn(
         help=help,
         pinned=pinned,
         alignment=alignment,
-        type_config=ImageColumnConfig(type="image"),
+        type_config=ImageColumnConfig(type="image", link_column=link_column),
     )
 
 

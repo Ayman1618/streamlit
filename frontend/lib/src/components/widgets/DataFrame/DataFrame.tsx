@@ -389,7 +389,8 @@ function DataFrame({
     data,
     originalColumns,
     numRows,
-    editingState
+    editingState,
+    allColumns
   )
 
   // A single sort hook handles both modes: client-side (eager) sorting and
@@ -413,6 +414,7 @@ function DataFrame({
     useLazyDataLoader({
       initialChunk: data,
       columns: originalColumns,
+      allColumns,
       numRows: originalNumRows,
       sourceId: lazyData?.sourceId ?? "",
       pageSize: lazyData?.pageSize ?? 1,

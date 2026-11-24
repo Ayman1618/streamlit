@@ -32,6 +32,10 @@ import {
   type BaseColumn,
   getErrorCell,
 } from "~lib/components/widgets/DataFrame/columns"
+import {
+  getImageLinkColumns,
+  withImageLink,
+} from "~lib/components/widgets/DataFrame/columns/ImageColumn"
 import type { ServerSortState } from "~lib/components/widgets/DataFrame/hooks/useColumnSort"
 import { LazyDataframeCache } from "~lib/components/widgets/DataFrame/LazyDataframeCache"
 import { Quiver } from "~lib/dataframes/Quiver"
@@ -56,6 +60,11 @@ interface UseLazyDataLoaderParams {
   initialChunk: Quiver
   /** The columns of the table (used to extract cell values from chunk data). */
   columns: BaseColumn[]
+  /**
+   * All columns, including hidden ones. Used to resolve the `link_column` of
+   * image columns. Defaults to `columns`.
+   */
+  allColumns?: BaseColumn[]
   /** The total number of rows in the source. */
   numRows: number
   /** The session-scoped source id. */
@@ -97,12 +106,18 @@ interface LazyLoaderController {
 function useLazyDataLoader({
   initialChunk,
   columns,
+  allColumns = columns,
   numRows,
   sourceId,
   pageSize,
   sortState,
   backendOperationClient,
 }: UseLazyDataLoaderParams): UseLazyDataLoaderReturn {
+  const imageLinkColumns = useMemo(
+    () => getImageLinkColumns(columns, allColumns),
+    [columns, allColumns]
+  )
+
   // Bumped whenever a chunk arrives. It is included in the `getCellContent`
   // dependency list so the returned cell getter changes identity on every
   // chunk load, which is what makes glide-data-grid repaint the affected cells
@@ -267,7 +282,17 @@ function useLazyDataLoader({
           const column = columns[col]
           const localRow = row - chunkIndex * effectivePageSize
           const arrowCell = chunk.getCell(localRow, column.indexNumber)
-          return getCellFromArrow(column, arrowCell, undefined)
+          const cell = getCellFromArrow(column, arrowCell, undefined)
+
+          const linkColumn = imageLinkColumns.get(column.indexNumber)
+          if (linkColumn === undefined) {
+            return cell
+          }
+          // Chunks contain all columns, so the link comes from the same row:
+          return withImageLink(
+            cell,
+            chunk.getCell(localRow, linkColumn.indexNumber).content
+          )
         } catch (error) {
           return getErrorCell(
             "Error during cell creation",
@@ -292,6 +317,7 @@ function useLazyDataLoader({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cacheVersion is an intentional repaint signal
     [
       columns,
+      imageLinkColumns,
       numRows,
       controller,
       effectivePageSize,

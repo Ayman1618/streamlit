@@ -464,6 +464,8 @@ if TYPE_CHECKING:
     assert_type(ImageColumn(alignment="center"), ColumnConfig)
     assert_type(ImageColumn(alignment="right"), ColumnConfig)
     assert_type(ImageColumn(alignment=None), ColumnConfig)
+    assert_type(ImageColumn(link_column="url"), ColumnConfig)
+    assert_type(ImageColumn(link_column=None), ColumnConfig)
     assert_type(
         ImageColumn(
             "Preview",
@@ -471,6 +473,7 @@ if TYPE_CHECKING:
             help="Thumbnail",
             pinned=False,
             alignment="center",
+            link_column="url",
         ),
         ColumnConfig,
     )
@@ -1060,6 +1063,7 @@ if TYPE_CHECKING:
     AreaChartColumn(disabled=True)  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
 
     ImageColumn(disabled=True)  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
+    ImageColumn(link_column=1)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     AudioColumn(color="auto")  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
     VideoColumn(alignment="justify")  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 

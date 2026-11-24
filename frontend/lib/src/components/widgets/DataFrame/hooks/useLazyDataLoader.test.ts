@@ -27,6 +27,7 @@ import {
   isErrorCell,
   TextColumn,
 } from "~lib/components/widgets/DataFrame/columns"
+import ImageColumn from "~lib/components/widgets/DataFrame/columns/ImageColumn"
 import { DataFrameCellType } from "~lib/dataframes/arrowTypeUtils"
 import { Quiver } from "~lib/dataframes/Quiver"
 import { UNICODE } from "~lib/mocks/arrow/types/unicode"
@@ -389,6 +390,90 @@ describe("useLazyDataLoader", () => {
       expect(result.current.getCellContent([0, 2]).kind).toBe(
         GridCellKind.Loading
       )
+    })
+  })
+})
+
+describe("useLazyDataLoader with image link columns", () => {
+  // Image column on "c1" (values "foo", "bar") that links to "c2" ("1", "2").
+  const LINKED_IMAGE_COLUMN = ImageColumn({
+    ...MOCK_COLUMNS[1],
+    columnTypeOptions: { type: "image", link_column: "c2" },
+  })
+  // The URL column is hidden: it is only part of `allColumns`.
+  const URL_COLUMN = TextColumn({
+    ...MOCK_COLUMNS[1],
+    id: "column-c2-1",
+    name: "c2",
+    title: "c2",
+    indexNumber: 2,
+    isHidden: true,
+  })
+
+  it("links each image to the URL of the same row, also in later chunks", async () => {
+    const { client, request } = makeClient(() =>
+      Promise.resolve({
+        sourceId: SOURCE_ID,
+        offset: PAGE_SIZE,
+        arrowData: { data: UNICODE },
+      })
+    )
+    const initialChunk = new Quiver({ data: UNICODE })
+    const { result } = renderHook(() =>
+      useLazyDataLoader({
+        initialChunk,
+        columns: [MOCK_COLUMNS[0], LINKED_IMAGE_COLUMN],
+        allColumns: [MOCK_COLUMNS[0], LINKED_IMAGE_COLUMN, URL_COLUMN],
+        numRows: 4,
+        sourceId: SOURCE_ID,
+        pageSize: PAGE_SIZE,
+        sortState: undefined,
+        backendOperationClient: client,
+      })
+    )
+
+    // Rows of the initial chunk:
+    expect(result.current.getCellContent([1, 0])).toMatchObject({
+      data: { kind: "linked-image-cell", imageUrl: "foo", href: "1" },
+    })
+    expect(result.current.getCellContent([1, 1])).toMatchObject({
+      data: { kind: "linked-image-cell", imageUrl: "bar", href: "2" },
+    })
+
+    // Row 3 is the second row of the chunk loaded on demand:
+    expect(result.current.getCellContent([1, 3]).kind).toBe(
+      GridCellKind.Loading
+    )
+    // Wait for the debounced request before reading the cell again, since
+    // reading an unloaded chunk reschedules the request.
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1))
+    await waitFor(() => {
+      expect(result.current.getCellContent([1, 3])).toMatchObject({
+        data: { kind: "linked-image-cell", imageUrl: "bar", href: "2" },
+      })
+    })
+  })
+
+  it("renders plain images if the link column does not exist", () => {
+    const { client } = makeClient(() => Promise.resolve({}))
+    const initialChunk = new Quiver({ data: UNICODE })
+    const { result } = renderHook(() =>
+      useLazyDataLoader({
+        initialChunk,
+        columns: [MOCK_COLUMNS[0], LINKED_IMAGE_COLUMN],
+        // The URL column is not available:
+        allColumns: [MOCK_COLUMNS[0], LINKED_IMAGE_COLUMN],
+        numRows: 4,
+        sourceId: SOURCE_ID,
+        pageSize: PAGE_SIZE,
+        sortState: undefined,
+        backendOperationClient: client,
+      })
+    )
+
+    expect(result.current.getCellContent([1, 0])).toMatchObject({
+      kind: GridCellKind.Image,
+      data: ["foo"],
     })
   })
 })
